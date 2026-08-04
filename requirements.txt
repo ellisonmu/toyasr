@@ -1,0 +1,14 @@
+# PyTorch must be installed separately — pick the right CUDA version at:
+#   https://pytorch.org/get-started/locally/
+# Example (CPU only):  pip install torch torchaudio
+
+torch>=2.0
+torchaudio>=2.0
+
+# Metrics
+jiwer>=3.0
+
+# Numerics / audio (already used by experiments/spectrogram.py)
+numpy>=1.24
+librosa>=0.9
+matplotlib
