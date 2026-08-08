@@ -59,7 +59,7 @@ $$
 Because we use a bidirectional LSTM, for each time step $t$ the hidden state dimension doubles, combining the forward and backward passes:
 
 $$
-(\text{Batch}, \text{Time}, 2 \times \text{hidden\_dim}) \rightarrow (\text{Batch}, \text{Time}, \text{vocab\_size})
+(\text{Batch}, \text{Time}, 2 \times \text{hiddendim}) \rightarrow (\text{Batch}, \text{Time}, \text{vocabsize})
 $$
 
 Before performing CTC loss, we pass our sequence of hidden states through a linear layer to project to the vocabulary dimension. This tensor is then passed through a Log-Softmax function, converting it into a PMF—the discrete probabilities of each character occurring at time step $t$.
