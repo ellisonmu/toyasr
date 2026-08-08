@@ -27,17 +27,13 @@ The input audio is represented as a $T \times 80$ tensor corresponding to log-me
 We permute the second layer's output:
 
 $$
-(\text{Batch}, \text{Channel}, \text{Frequency}, \text{Time})
-\rightarrow
-(\text{Batch}, \text{Time}, \text{Channel}, \text{Frequency})
+(\text{Batch}, \text{Channel}, \text{Frequency}, \text{Time}) \rightarrow (\text{Batch}, \text{Time}, \text{Channel}, \text{Frequency})
 $$
 
 Then we reshape:
 
 $$
-(\text{Batch}, \text{Time}, \text{Channel}, \text{Frequency})
-\rightarrow
-(\text{Batch}, \text{Time}, \text{Channel} \times \text{Frequency})
+(\text{Batch}, \text{Time}, \text{Channel}, \text{Frequency}) \rightarrow (\text{Batch}, \text{Time}, \text{Channel} \times \text{Frequency})
 $$
 
 ### Bidirectional Long Short-Term Memory Model
@@ -63,9 +59,7 @@ $$
 Because we use a bidirectional LSTM, for each time step $t$ the hidden state dimension doubles, combining the forward and backward passes:
 
 $$
-(\text{Batch}, \text{Time}, 2 \times \text{hidden_dim})
-\rightarrow
-(\text{Batch}, \text{Time}, \text{vocab_size})
+(\text{Batch}, \text{Time}, 2 \times \text{hidden\_dim}) \rightarrow (\text{Batch}, \text{Time}, \text{vocab\_size})
 $$
 
 Before performing CTC loss, we pass our sequence of hidden states through a linear layer to project to the vocabulary dimension. This tensor is then passed through a Log-Softmax function, converting it into a PMF—the discrete probabilities of each character occurring at time step $t$.
@@ -87,10 +81,7 @@ Given the input sequence with character PMFs, CTC evaluates the probability of t
 CTC computes this by considering all valid alignments of the target within the output sequence length. Let $\pi$ denote an alignment and $\mathcal{A}(\text{Target})$ denote the set of valid alignments:
 
 $$
-P(Y = \text{Target} \mid X)
-=
-\sum_{\pi \in \mathcal{A}(\text{Target})}
-P(\pi \mid X)
+P(Y = \text{Target} \mid X) = \sum_{\pi \in \mathcal{A}(\text{Target})} P(\pi \mid X)
 $$
 
 Because we have the PMF at each time step within the sequence, CTC can directly compute $P(\pi \mid X)$.
@@ -98,8 +89,7 @@ Because we have the PMF at each time step within the sequence, CTC can directly 
 Each input vector $x_t$, for an all-lowercase alphabet plus the blank token, has length $26 + 1 = 27$:
 
 $$
-x_t =
-[p_a, p_b, \dots, p_z, p_{\epsilon}]^T
+x_t = [p_a, p_b, \dots, p_z, p_{\epsilon}]^T
 $$
 
 where
@@ -138,12 +128,7 @@ Then:
 
 $$
 \begin{aligned}
-P(\pi \mid X)
-&=
-P(y_1 = a \mid x_1)
-P(y_2 = b \mid x_2) \\
-&\quad \times
-P(y_3 = \epsilon \mid x_3)
-P(y_4 = c \mid x_4)
+P(\pi \mid X) &= P(y_1 = a \mid x_1) \, P(y_2 = b \mid x_2) \\
+&\quad \times P(y_3 = \epsilon \mid x_3) \, P(y_4 = c \mid x_4)
 \end{aligned}
 $$
