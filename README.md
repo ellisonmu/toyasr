@@ -79,10 +79,7 @@ Refer to [Connectionist Temporal Classification](https://www.geeksforgeeks.org/n
 The CTC loss is defined as:
 
 $$
-\mathcal{L}
-===========
-
--\log P(Y = \text{Target} \mid X)
+\mathcal{L} = -\log P(Y = \text{Target} \mid X)
 $$
 
 Given the input sequence with character PMFs, CTC evaluates the probability of the target string occurring. The higher the probability, the smaller the loss, allowing the model to learn.
@@ -91,8 +88,7 @@ CTC computes this by considering all valid alignments of the target within the o
 
 $$
 P(Y = \text{Target} \mid X)
-===========================
-
+=
 \sum_{\pi \in \mathcal{A}(\text{Target})}
 P(\pi \mid X)
 $$
@@ -145,7 +141,7 @@ $$
 P(\pi \mid X)
 &=
 P(y_1 = a \mid x_1)
-P(y_2 = b \mid x_2) \
+P(y_2 = b \mid x_2) \\
 &\quad \times
 P(y_3 = \epsilon \mid x_3)
 P(y_4 = c \mid x_4)
