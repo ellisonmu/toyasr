@@ -137,6 +137,10 @@ $$
 
 Using this toy model we apply various preprocessing techniques in conjunction with scalar quantization, to evaluate their impact on ASR performance. We consider mu-law companding and dithering. A block diagram of our tested system is shown below. Specifically, we switch the dithering and mu-law companding blocks on and off, and sweep the quantizer bitdepth from 1 to 6, giving a $6 \times 2 \times 2 = 24$-point sweep, each point trained as its own model (`run_all.py`, driving `train.py`).
 
+![Block Diagram of the Dithered Quantizer](./ditheredquantizer.png)
+
+*Figure 4: Block Diagram of the Dithered Quantizer.*
+
 Dithering, when enabled, is subtractive: a triangular dither is added before quantization and subtracted from the quantized signal afterward. When mu-law companding is also enabled, we intentionally do **not** apply the inverse (expansion) step after the dither is subtracted -- the signal is left companded. This is a deliberate choice for this sweep, not an oversight.
 
 Each run's results (per-epoch WER/CER, WER-vs-epoch plot, model weights) are written to a directory named after its exact setting, e.g. `results/3bit_ditherOn_mulawOff/`. After the full sweep, `plot_sweep.py` summarizes minimum WER vs bitdepth, one line per dither/mulaw setting; CER is still recorded in each run's CSV but is left out of the plots.
