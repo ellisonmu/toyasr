@@ -1,12 +1,9 @@
 """
-SpeechCommandsCTC / WaveformCommandsCTC / ManifestCommandsCTC
+SpeechCommandsCTC / ManifestCommandsCTC
 
 Google Speech Commands (v0.02 -- 35 single-word commands, ~1s clips @ 16kHz)
-  - SpeechCommandsCTC -> log-mel spectrogram  
-  - WaveformCommandsCTC -> raw waveform 
-  - ManifestCommandsCTC -> reads pre-compressed WAVs from CSV 
-    from experiments.dithering import dither_app
-    from functools import partial
+  - SpeechCommandsCTC -> log-mel spectrogram
+  - ManifestCommandsCTC -> reads pre-compressed WAVs from CSV
 """
 
 import csv
@@ -21,10 +18,9 @@ import soundfile as sf
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 
-_pkg_root = Path(__file__).parent.parent
+_pkg_root = Path(__file__).parent
 sys.path.insert(0, str(_pkg_root))
-sys.path.insert(0, str(_pkg_root / "experiments"))
-from experiments.spectrogram import log_mel_spectrogram
+from spectrogram import log_mel_spectrogram
 
 # torchaudio >=2.9 routes torchaudio.load() through TorchCodec, which needs
 # system FFmpeg shared libs that aren't readily available on Windows. Speech
@@ -62,7 +58,7 @@ def _load_quantized(dataset, idx, quantize_fn):
     return audio, label
 
 class SpeechCommandsCTC(Dataset):
-    """for train2.py """
+    """for train.py """
 
     def __init__(self, root, subset="training", quantize_fn=None, download=True):
         self.dataset = torchaudio.datasets.SPEECHCOMMANDS(
@@ -88,30 +84,6 @@ def ctc_collate(batch):
     feats_padded = pad_sequence(feats, batch_first=True)  # (B, T, 80)
     targets_cat  = torch.cat(targets) # CTCLoss expects concatenated targets
     return feats_padded, targets_cat, input_lengths, target_lengths
-
-class WaveformCommandsCTC(Dataset):
-    """ for train1.py """
-
-    def __init__(self, root, subset="training", quantize_fn=None, download=True):
-        self.dataset = torchaudio.datasets.SPEECHCOMMANDS(
-            root=str(root), download=download, subset=subset,
-        )
-        self.quantize_fn = quantize_fn
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        audio, label = _load_quantized(self.dataset, idx, self.quantize_fn)
-        return torch.from_numpy(audio).float(), encode(label)
-
-def waveform_ctc_collate(batch):
-    waveforms, targets = zip(*batch)
-    input_lengths  = torch.tensor([w.shape[0] for w in waveforms], dtype=torch.long)
-    target_lengths = torch.tensor([len(t)     for t in targets],   dtype=torch.long)
-    waveforms_padded = pad_sequence(waveforms, batch_first=True)   # (B, samples)
-    targets_cat = torch.cat(targets)
-    return waveforms_padded, targets_cat, input_lengths, target_lengths
 
 class ManifestCommandsCTC(Dataset):
     def __init__(self, manifest_csv, feature_type="waveform", quantize_fn=None):

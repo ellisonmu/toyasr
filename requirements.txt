@@ -8,7 +8,8 @@ torchaudio>=2.0
 # Metrics
 jiwer>=3.0
 
-# Numerics / audio (already used by experiments/spectrogram.py)
+# Numerics / audio (used by spectrogram.py, dithering.py, dataset.py)
 numpy>=1.24
 librosa>=0.9
+soundfile>=0.12
 matplotlib

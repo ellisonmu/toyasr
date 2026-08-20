@@ -24,11 +24,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 _toymodel = Path(__file__).parent
-_pkg_root  = _toymodel.parent
-sys.path.insert(0, str(_pkg_root))
-sys.path.insert(0, str(_pkg_root / "experiments"))
-from experiments.dithering   import dither_app
-from experiments.spectrogram import log_mel_spectrogram, HOP, SR
+sys.path.insert(0, str(_toymodel))
+from dithering   import dither_app
+from spectrogram import log_mel_spectrogram, HOP, SR
 
 DATA_ROOT = _toymodel / "data" / "SpeechCommands" / "speech_commands_v0.02"
 OUT_DIR   = _toymodel / "samples"

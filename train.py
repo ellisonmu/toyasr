@@ -1,5 +1,10 @@
 """
-train2.py -- waveform -> log-mel spectrogram -> 2D-conv front end -> BiLSTM + CTC
+train.py -- waveform -> log-mel spectrogram -> 2D-conv front end -> BiLSTM + CTC
+
+Trains one model for one point in the evaluation sweep: a (bitdepth, dither
+on/off, mu-law compression on/off) setting. run_all.py drives this script
+across the full 24-point sweep (bitdepth 1-6 x dither {on,off} x mulaw
+{on,off}); see README Evaluation section.
 """
 
 import argparse
@@ -18,31 +23,27 @@ from torch.utils.data import DataLoader
 import jiwer
 
 torch.backends.cudnn.benchmark = True
+torch.set_float32_matmul_precision("high")  # allow TF32 matmuls on Ampere/Ada tensor cores
 
-_toymodel = Path(__file__).parent.parent   # python-files/toymodel/
-_root     = _toymodel.parent               # python-files/
-sys.path.insert(0, str(_toymodel))                  # model.py, dataset.py, plot_sweep.py
-sys.path.insert(0, str(_root))                      # from experiments.X import Y
-sys.path.insert(0, str(_root / "experiments"))      # bare imports inside dithering.py
+_root = Path(__file__).parent
+sys.path.insert(0, str(_root))   # model.py, dataset.py, dithering.py, spectrogram.py, plot_sweep.py
 
-from model      import CTCConv2DModel
-from dataset    import SpeechCommandsCTC, ctc_collate, decode, BLANK_IDX, VOCAB_SIZE
-from quantization import uniform_quantization, amplitude_normalize
+from model import CTCConv2DModel
+from dataset import SpeechCommandsCTC, ctc_collate, decode, BLANK_IDX, VOCAB_SIZE
+from dithering import build_quantize_fn
 
-DATA_ROOT   = _toymodel / "data"                   # toymodel/data/
-RESULTS_DIR = Path(__file__).parent / "results"    # toymodel/model2/results/
-WEIGHTS_DIR = Path(__file__).parent / "weights"    # toymodel/model2/weights/
+DATA_ROOT   = _root / "data"      # data/
+RESULTS_DIR = _root / "results"   # results/<run_label>/
+WEIGHTS_DIR = _root / "weights"   # weights/<run_label>/
 DEVICE      = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-BITDEPTH = 2
 
 HIDDEN_DIM   = 128
 NUM_LAYERS   = 2
 EPOCHS       = 30
-BATCH_SIZE   = 64
+BATCH_SIZE   = 256
 LR           = 1e-3
 WARMUP_STEPS = 200
-NUM_WORKERS  = min(4, os.cpu_count() or 1)
+NUM_WORKERS  = min(16, os.cpu_count() or 1)
 
 def evaluate(model, loader, use_amp=False):
     """Greedy CTC decode (collapse repeats, drop blanks) -> WER/CER vs label."""
@@ -75,49 +76,53 @@ def evaluate(model, loader, use_amp=False):
     return {"wer": jiwer.wer(refs, hyps), "cer": jiwer.cer(refs, hyps)}
 
 def main():
-    global BITDEPTH, PARAMS
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bitdepth", type=int, default=BITDEPTH)
+    parser.add_argument("--bitdepth", type=int, default=3, choices=range(1, 7),
+                         help="Quantizer bitdepth, 1-6.")
+    parser.add_argument("--dither", action=argparse.BooleanOptionalAction, default=False,
+                         help="Apply subtractive dithering before quantization.")
+    parser.add_argument("--mulaw", action=argparse.BooleanOptionalAction, default=False,
+                         help="Apply mu-law companding before quantization "
+                              "(no inverse expansion afterward -- intentional, see README).")
     parser.add_argument(
         "--no-quant", action="store_true",
         help="Run with clean audio (no quantization). "
              "Use this to verify the model can learn before quantizing.",
     )
     args = parser.parse_args()
-    BITDEPTH = args.bitdepth
 
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
 
     use_amp = DEVICE.type == "cuda"
-    scaler  = torch.cuda.amp.GradScaler(enabled=use_amp)
+    scaler  = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     if args.no_quant:
         quantize_fn = None
         run_label   = "clean"
     else:
-        quantize_fn = lambda audio: uniform_quantization(amplitude_normalize(audio), bitdepth=BITDEPTH)
-        run_label   = f"{BITDEPTH}bit"
+        quantize_fn = build_quantize_fn(args.bitdepth, dither=args.dither, mulaw=args.mulaw)
+        run_label   = (f"{args.bitdepth}bit"
+                        f"_dither{'On' if args.dither else 'Off'}"
+                        f"_mulaw{'On' if args.mulaw else 'Off'}")
 
     train_ds = SpeechCommandsCTC(DATA_ROOT, subset="training",   quantize_fn=quantize_fn)
     val_ds   = SpeechCommandsCTC(DATA_ROOT, subset="validation", quantize_fn=quantize_fn)
     print(f"train: {len(train_ds)}  val: {len(val_ds)}")
 
-    train_loader = DataLoader(
-        train_ds, batch_size=BATCH_SIZE, shuffle=True,
+    loader_kwargs = dict(
         collate_fn=ctc_collate, num_workers=NUM_WORKERS,
-        pin_memory=use_amp, persistent_workers=(NUM_WORKERS > 0),
+        pin_memory=(DEVICE.type == "cuda"), persistent_workers=(NUM_WORKERS > 0),
     )
-    val_loader = DataLoader(
-        val_ds, batch_size=BATCH_SIZE, shuffle=False,
-        collate_fn=ctc_collate, num_workers=NUM_WORKERS,
-        pin_memory=use_amp, persistent_workers=(NUM_WORKERS > 0),
-    )
+    if NUM_WORKERS > 0:
+        loader_kwargs["prefetch_factor"] = 4
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, **loader_kwargs)
+    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, **loader_kwargs)
 
     run_dir     = RESULTS_DIR / run_label
     weights_dir = WEIGHTS_DIR / run_label
     run_dir.mkdir(parents=True, exist_ok=True)
     weights_dir.mkdir(parents=True, exist_ok=True)
-    print(f"\n=== bitdepth={BITDEPTH if quantize_fn else 'none'} ===")
+    print(f"\n=== run: {run_label} ===")
 
     model = CTCConv2DModel(n_mels=80, hidden_dim=HIDDEN_DIM, num_layers=NUM_LAYERS,
                            vocab_size=VOCAB_SIZE).to(DEVICE)
@@ -134,10 +139,10 @@ def main():
         model.train()
         running_loss = 0.0
         for feats, targets, raw_lengths, target_lengths in train_loader:
-            # Linear LR warmup over the first WARMUP_STEPS steps, ramping
-            # 0 -> LR, to avoid the model collapsing to all-blank before
-            # it sees enough gradient signal. CosineAnnealingLR (stepped
-            # once per epoch, below) takes over once warmup completes.
+            """Linear LR warmup over the first WARMUP_STEPS steps, ramping
+            0 -> LR, to avoid the model collapsing to all-blank before
+            it sees enough gradient signal. CosineAnnealingLR (stepped
+            once per epoch, below) takes over once warmup completes"""
             if global_step < WARMUP_STEPS:
                 warmup_lr = LR * (global_step + 1) / WARMUP_STEPS
                 for group in optimizer.param_groups:
@@ -182,14 +187,13 @@ def main():
     epochs_range = list(range(1, EPOCHS + 1))
     plt.figure()
     plt.plot(epochs_range, wer_history, marker="o", label="WER")
-    plt.plot(epochs_range, cer_history, marker="o", label="CER")
     plt.xlabel("Epoch")
-    plt.ylabel("Error rate")
-    plt.title(f"Validation WER/CER vs Epoch ({run_label})")
+    plt.ylabel("Word error rate")
+    plt.title(f"Validation WER vs Epoch ({run_label})")
     plt.ylim(0, 1)
     plt.legend()
     plt.grid(True)
-    plt.savefig(run_dir / "wer_cer_vs_epoch.png")
+    plt.savefig(run_dir / "wer_vs_epoch.png")
     plt.close()
 
     print(f"Done {run_label}. Results -> {run_dir}/  Weights -> {weights_dir}/")
