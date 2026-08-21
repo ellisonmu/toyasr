@@ -1,12 +1,16 @@
 """
 run_all.py -- Run train.py across the evaluation sweep: bitdepth x dither
-on/off x mu-law compression on/off (6 x 2 x 2 = 24 models by default).
+on/off x mu-law compression on/off (6 x 2 x 2 = 24 models by default), plus
+a no-processing control (clean audio straight through the ASR, no
+quantization) that the sweep plot compares against as a dashed reference line.
 
 Usage:
-    python run_all.py                                # full 24-point sweep
+    python run_all.py                                # control + full 24-point sweep
     python run_all.py --bitdepths 3 5                 # restrict bitdepths
     python run_all.py --dither on --mulaw off          # restrict to one dither/mulaw combo
     python run_all.py --bitdepths 3 --dither on off --mulaw on off
+    python run_all.py --no-sweep                       # control only, skip the sweep
+    python run_all.py --no-control                     # sweep only, skip the control
 """
 
 import argparse
@@ -39,6 +43,17 @@ def run(bitdepth: int, dither: bool, mulaw: bool):
               f"code {result.returncode} -- stopping.")
         sys.exit(result.returncode)
 
+def run_control():
+    print(f"\n{'=' * 60}")
+    print("Running train.py  --no-quant   (control, no processing)")
+    print(f"{'=' * 60}\n")
+    cmd = [sys.executable, str(TRAIN), "--no-quant"]
+    result = subprocess.run(cmd, cwd=str(HERE))
+    if result.returncode != 0:
+        print(f"\n[run_all] train.py (control) exited with "
+              f"code {result.returncode} -- stopping.")
+        sys.exit(result.returncode)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -54,16 +69,28 @@ if __name__ == "__main__":
         "--mulaw", nargs="+", choices=["on", "off"], default=["on", "off"],
         help="Mu-law companding settings to sweep. Default: on off",
     )
+    parser.add_argument(
+        "--control", action=argparse.BooleanOptionalAction, default=True,
+        help="Run the no-processing control (clean audio, train.py --no-quant). Default: on",
+    )
+    parser.add_argument(
+        "--sweep", action=argparse.BooleanOptionalAction, default=True,
+        help="Run the bitdepth x dither x mulaw sweep. Default: on",
+    )
     args = parser.parse_args()
 
-    dither_settings = [ON_OFF[d] for d in args.dither]
-    mulaw_settings  = [ON_OFF[m] for m in args.mulaw]
+    if args.control:
+        run_control()
 
-    combos = list(itertools.product(args.bitdepths, dither_settings, mulaw_settings))
-    print(f"[run_all] Sweeping {len(combos)} run(s).")
+    if args.sweep:
+        dither_settings = [ON_OFF[d] for d in args.dither]
+        mulaw_settings  = [ON_OFF[m] for m in args.mulaw]
 
-    for bd, dither, mulaw in combos:
-        run(bd, dither, mulaw)
+        combos = list(itertools.product(args.bitdepths, dither_settings, mulaw_settings))
+        print(f"[run_all] Sweeping {len(combos)} run(s).")
+
+        for bd, dither, mulaw in combos:
+            run(bd, dither, mulaw)
 
     print("\n[run_all] All done.")
 
