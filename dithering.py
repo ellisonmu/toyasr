@@ -49,6 +49,35 @@ def dither_app(input_signal, bitdepth, param, Qtype='uniform', Dtype='subtractiv
     return normalized
 
 
+class _DitherQuantizeFn:
+    def __init__(self, bitdepth, dither_alpha, compand):
+        self.bitdepth = bitdepth
+        self.dither_alpha = dither_alpha
+        self.compand = compand
+
+    def __call__(self, audio):
+        return dither_app(
+            amplitude_normalize(audio), self.bitdepth, self.dither_alpha,
+            compand=self.compand,
+        )
+
+
+class _MulawQuantizeFn:
+    def __init__(self, bitdepth):
+        self.bitdepth = bitdepth
+
+    def __call__(self, audio):
+        return uniform_quantization(mulaw_compand(amplitude_normalize(audio)), self.bitdepth)
+
+
+class _PlainQuantizeFn:
+    def __init__(self, bitdepth):
+        self.bitdepth = bitdepth
+
+    def __call__(self, audio):
+        return uniform_quantization(amplitude_normalize(audio), self.bitdepth)
+
+
 def build_quantize_fn(bitdepth, dither=False, mulaw=False, dither_alpha=1.0):
     """
     Compose the audio -> quantized-audio pipeline for one (bitdepth, dither,
@@ -58,16 +87,16 @@ def build_quantize_fn(bitdepth, dither=False, mulaw=False, dither_alpha=1.0):
     when mulaw is also on, dither_app never applies the inverse mu-law
     expansion after subtracting the dither -- that omission is intentional,
     not a bug (see README Evaluation section).
+
+    Returns a picklable callable object (not a closure/lambda) since
+    DataLoader workers on Windows use the 'spawn' start method, which
+    requires pickling the dataset (and this function) to send to workers.
     """
     if dither:
         compand = 'mulaw' if mulaw else 'none'
-        return lambda audio: dither_app(
-            amplitude_normalize(audio), bitdepth, dither_alpha, compand=compand,
-        )
+        return _DitherQuantizeFn(bitdepth, dither_alpha, compand)
     if mulaw:
-        return lambda audio: uniform_quantization(
-            mulaw_compand(amplitude_normalize(audio)), bitdepth,
-        )
-    return lambda audio: uniform_quantization(amplitude_normalize(audio), bitdepth)
+        return _MulawQuantizeFn(bitdepth)
+    return _PlainQuantizeFn(bitdepth)
 
 

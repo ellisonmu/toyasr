@@ -7,6 +7,8 @@ N_FFT = 400       # 25ms window
 HOP = 160         # 10ms stride
 N_MELS = 80
 
+_MEL_FB = librosa.filters.mel(sr=SR, n_fft=N_FFT, n_mels=N_MELS)
+
 
 def log_mel_spectrogram(audio: np.ndarray) -> np.ndarray:
     """
@@ -16,10 +18,11 @@ def log_mel_spectrogram(audio: np.ndarray) -> np.ndarray:
     """
     if len(audio) < 2:
         audio = np.zeros(N_FFT, dtype=np.float32)
-    mel = librosa.feature.melspectrogram(
-        y=audio, sr=SR, n_fft=N_FFT, hop_length=HOP,
-        n_mels=N_MELS, window="hann", center=True, pad_mode="constant"
+    stft = librosa.stft(
+        y=audio, n_fft=N_FFT, hop_length=HOP,
+        window="hann", center=True, pad_mode="constant"
     )
+    mel = _MEL_FB @ np.abs(stft) ** 2
     log_mel = np.log10(np.maximum(mel, 1e-10))
     log_mel = np.maximum(log_mel, log_mel.max() - 8.0)  
     log_mel = (log_mel + 4.0) / 4.0 # shift to approx [-1, 1]

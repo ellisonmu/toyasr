@@ -11,6 +11,18 @@ import argparse
 import csv
 import os
 import sys
+
+# Each DataLoader worker only ever does tiny per-sample math (FFT + small
+# matmul for a ~1s clip); parallelism already comes from running many worker
+# processes. Without this, every worker's BLAS pool tries to multithread
+# across all cores, and N workers fighting each other over the same cores
+# makes feature extraction ~15x slower than single-threaded BLAS per worker.
+# Must be set before numpy/torch/librosa are imported (in this process and in
+# spawned workers, which re-run this module from the top).
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -39,7 +51,7 @@ DEVICE      = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 HIDDEN_DIM   = 128
 NUM_LAYERS   = 2
-EPOCHS       = 30
+EPOCHS       = 20
 BATCH_SIZE   = 256
 LR           = 1e-3
 WARMUP_STEPS = 200
