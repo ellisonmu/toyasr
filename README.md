@@ -144,3 +144,15 @@ Using this toy model we apply various preprocessing techniques in conjunction wi
 Dithering, when enabled, is subtractive: a triangular dither is added before quantization and subtracted from the quantized signal afterward. When mu-law companding is also enabled, we intentionally do **not** apply the inverse (expansion) step after the dither is subtracted -- the signal is left companded. This is a deliberate choice for this sweep, not an oversight.
 
 Each run's results (per-epoch WER/CER, WER-vs-epoch plot, model weights) are written to a directory named after its exact setting, e.g. `results/3bit_ditherOn_mulawOff/`. After the full sweep, `plot_sweep.py` summarizes minimum WER vs bitdepth, one line per dither/mulaw setting; CER is still recorded in each run's CSV but is left out of the plots.
+
+### Discussion
+
+The sweep results show the expected trend within each condition: increasing the scalar quantizer's bitdepth decreases WER. Dithering, on the other hand, never provides a clear benefit — when mu-law compression is off, dithered runs are occasionally on par with their non-dithered counterparts but are just as often worse, and when mu-law is on there is no significant difference between dithering and no dithering. Mu-law compression itself only helps at low bitdepths (notably 2 bits), where it gives a small improvement over compression being off; at higher bitdepths, compression off is consistently better.
+
+Only the 6-bit, compression-off condition gets close to the lower-bound WER set by the Whisper base model we evaluated against. So under the conditions tested, bitdepth is by far the most impactful variable for a scalar quantizer. That said, at low rates — specifically 2 bits — shaping the input distribution to better use the quantizer's dynamic range (i.e., matching it to the Laplacian-like amplitude distribution of speech) is measurably beneficial.
+
+It's still an open question why compression prevents the model from converging closer to the Whisper lower bound at higher bitdepths. It doesn't seem to be an interaction between dithering and compression, since dithering on vs. off makes little difference either way. A plausible explanation is that the logarithmic compression curve distorts the amplitude mapping in a way that damages harmonic structure the model relies on, but this hasn't been verified. Future work would look into:
+
+- Why compression underperforms at higher bitdepths specifically, and whether at large numbers of quantization levels the compression curve causes the opposite problem — collisions/clipping in the expanded (decompanded) amplitude range for Laplacian-distributed speech.
+- Training a full-scale ASR model on this sweep rather than the toy model here.
+- A mechanistic-interpretability pass on the trained models to better understand what's actually happening internally under each condition.
