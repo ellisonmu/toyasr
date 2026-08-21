@@ -4,7 +4,7 @@
 
 ## Introduction
 
-This document provides a step-by-step walkthrough of a toy Automatic Speech Recognition (ASR) model. Through layer-by-layer visual diagrams and structural descriptions, it details how audio data is transformed and propagated through the network to generate text predictions. This serves as an accessible conceptual introduction for readers new to ASR or machine learning in general.
+This document covers two related pieces of work built around a toy Automatic Speech Recognition (ASR) model. First, it provides a step-by-step walkthrough of the model: through layer-by-layer visual diagrams and structural descriptions, it details how audio data is transformed and propagated through the network to generate text predictions, serving as an accessible conceptual introduction for readers new to ASR or machine learning in general. Second, it uses that same model as a testbed for an evaluation sweep over audio preprocessing choices, scalar quantizer bitdepth, dithering, and mu-law companding, to study how each affects recognition accuracy.
 
 ![Block Diagram of Toy ASR Model](./toymodelbd.png)
 
